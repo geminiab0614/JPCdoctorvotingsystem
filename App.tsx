@@ -1,29 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { Doctor, SystemConfig, ROLES } from './types';
+import { Doctor, SystemConfig, ROLES, THEMES } from './types';
 import * as FirebaseService from './services/firebase';
 import AdminDashboard from './components/AdminDashboard';
 import VotingForm from './components/VotingForm';
-import { UserCircle2, Lock, ArrowLeft } from 'lucide-react';
+import { UserCircle2, Lock, ArrowLeft, KeyRound } from 'lucide-react';
 
-// Main App Component
 const App: React.FC = () => {
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Auth State
-  const [currentUser, setCurrentUser] = useState<Doctor | null>(null); // For regular voters
+  const [currentUser, setCurrentUser] = useState<Doctor | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   
-  // UI State for Login
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   
-  // Selection State for Login
   const [selectedRole, setSelectedRole] = useState<'attending' | 'resident'>(ROLES.RESIDENT);
   const [selectedVoterId, setSelectedVoterId] = useState<string>('');
-  const [passwordInput, setPasswordInput] = useState('');
+  const [voterPassword, setVoterPassword] = useState(''); // 新增：醫師登入密碼
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
   
-  // Voting Status
   const [votedMap, setVotedMap] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -54,9 +50,9 @@ const App: React.FC = () => {
   };
 
   const handleAdminLogin = () => {
-    if (config && passwordInput === config.adminPassword) {
+    if (config && adminPasswordInput === config.adminPassword) {
       setIsAdmin(true);
-      setPasswordInput('');
+      setAdminPasswordInput('');
       setShowAdminLogin(false);
     } else {
       alert('密碼錯誤');
@@ -69,23 +65,34 @@ const App: React.FC = () => {
       return;
     }
     const doctor = doctors.find(d => d.id === selectedVoterId);
-    if (doctor) {
-      if (votedMap[doctor.name]) {
-        alert('您本月已經完成投票，感謝您的參與！');
+    if (!doctor) return;
+
+    // 密碼驗證邏輯
+    const correctPassword = doctor.password || '0000';
+    if (voterPassword !== correctPassword) {
+        alert("密碼錯誤，預設密碼為 0000");
         return;
-      }
-      setCurrentUser(doctor);
     }
+
+    if (votedMap[doctor.name]) {
+      alert('您本月已經完成投票，感謝您的參與！');
+      return;
+    }
+    setCurrentUser(doctor);
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
     setIsAdmin(false);
-    setPasswordInput('');
+    setAdminPasswordInput('');
+    setVoterPassword('');
     setSelectedVoterId('');
     setShowAdminLogin(false);
     initializeData();
   };
+
+  // 取得當前主題
+  const currentTheme = config?.theme ? THEMES[config.theme] : THEMES.blue;
 
   if (loading) {
     return (
@@ -97,7 +104,6 @@ const App: React.FC = () => {
 
   if (!config) return <div className="p-4 text-red-500">系統設定載入失敗，請檢查網路連線。</div>;
 
-  // --- View: Admin Dashboard ---
   if (isAdmin) {
     return (
       <AdminDashboard 
@@ -108,10 +114,9 @@ const App: React.FC = () => {
     );
   }
 
-  // --- View: Voting Form ---
   if (currentUser) {
     return (
-      <div className="min-h-screen bg-gray-100 px-4 py-8">
+      <div className={`min-h-screen bg-gray-50 px-4 py-8`}>
         <VotingForm 
           voter={currentUser} 
           config={config} 
@@ -123,77 +128,91 @@ const App: React.FC = () => {
     );
   }
 
-  // --- View: Login Screen (Default) ---
   const filteredDoctors = doctors
     .filter(d => d.role === selectedRole)
     .sort((a, b) => a.name.localeCompare(b.name, 'zh-TW')); 
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-blue-100 flex flex-col items-center justify-center p-4">
+    <div className={`min-h-screen bg-gradient-to-b ${currentTheme.bgGradient} flex flex-col items-center justify-center p-4`}>
       <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden relative">
-        <div className="bg-blue-600 p-6 text-center text-white">
-          <h1 className="text-2xl font-bold mb-2">嘉南療養院</h1>
-          <p className="text-blue-100">一般精神科優良醫師票選系統</p>
-          <div className="mt-2 text-sm bg-blue-700 inline-block px-3 py-1 rounded-full">
-            {config.currentYear} 年 {config.currentMonth} 月
+        <div className={`${currentTheme.primary} p-6 text-center text-white`}>
+          <h1 className="text-xl font-bold mb-1 opacity-90">衛生福利部嘉南療養院</h1>
+          <h2 className="text-2xl font-bold tracking-wide">醫科優良醫師票選系統</h2>
+          <div className="mt-3 text-sm bg-white bg-opacity-20 inline-block px-3 py-1 rounded-full backdrop-blur-sm">
+            民國 {config.currentYear} 年 {config.currentMonth} 月
           </div>
         </div>
 
         <div className="p-8 pb-12">
           {!showAdminLogin ? (
-            // --- Doctor Login View ---
             <div className="space-y-6 animate-fade-in">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  請選擇您的身分
+                  1. 請選擇您的身分
                 </label>
                 <div className="flex bg-gray-100 p-1 rounded-lg mb-4">
                   <button
-                    className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${selectedRole === ROLES.RESIDENT ? 'bg-white shadow text-blue-700' : 'text-gray-500'}`}
-                    onClick={() => { setSelectedRole(ROLES.RESIDENT); setSelectedVoterId(''); }}
+                    className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${selectedRole === ROLES.RESIDENT ? `bg-white shadow ${currentTheme.text}` : 'text-gray-500'}`}
+                    onClick={() => { setSelectedRole(ROLES.RESIDENT); setSelectedVoterId(''); setVoterPassword(''); }}
                   >
                     住院醫師
                   </button>
                   <button
-                    className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${selectedRole === ROLES.ATTENDING ? 'bg-white shadow text-blue-700' : 'text-gray-500'}`}
-                    onClick={() => { setSelectedRole(ROLES.ATTENDING); setSelectedVoterId(''); }}
+                    className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${selectedRole === ROLES.ATTENDING ? `bg-white shadow ${currentTheme.text}` : 'text-gray-500'}`}
+                    onClick={() => { setSelectedRole(ROLES.ATTENDING); setSelectedVoterId(''); setVoterPassword(''); }}
                   >
                     主治醫師
                   </button>
                 </div>
 
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  請選擇您的姓名 (依姓氏筆畫排列)
+                  2. 請選擇您的姓名
                 </label>
-                <div className="relative">
+                <div className="relative mb-4">
                   <UserCircle2 className="absolute left-3 top-3 text-gray-400" size={20} />
                   <select
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none appearance-none bg-white"
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-opacity-50 outline-none appearance-none bg-white transition-all focus:ring-blue-400"
                     value={selectedVoterId}
-                    onChange={(e) => setSelectedVoterId(e.target.value)}
+                    onChange={(e) => { setSelectedVoterId(e.target.value); setVoterPassword(''); }}
                   >
                     <option value="" disabled>-- 請下拉選擇 --</option>
                     {filteredDoctors.map(doctor => {
                       const hasVoted = votedMap[doctor.name];
                       return (
                         <option key={doctor.id} value={doctor.id} disabled={hasVoted} className={hasVoted ? 'text-gray-400 bg-gray-50' : ''}>
-                          {doctor.name} {hasVoted ? '(已完成投票)' : ''}
+                          {doctor.name} {hasVoted ? '(已完成)' : ''}
                         </option>
                       );
                     })}
                   </select>
                 </div>
 
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  3. 請輸入登入密碼 <span className="text-xs text-gray-400 font-normal">(預設: 0000)</span>
+                </label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-3 text-gray-400" size={18} />
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={4}
+                    placeholder="請輸入4位數字密碼"
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-opacity-50 outline-none transition-all focus:ring-blue-400"
+                    value={voterPassword}
+                    onChange={(e) => setVoterPassword(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleVoterLogin()}
+                  />
+                </div>
+
                 <button
                   onClick={handleVoterLogin}
-                  className="w-full mt-6 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-bold transition-colors shadow-md"
+                  className={`w-full mt-8 ${currentTheme.primary} ${currentTheme.primaryHover} text-white py-3 rounded-lg font-bold transition-all shadow-md active:scale-95`}
                 >
                   進入投票
                 </button>
               </div>
             </div>
           ) : (
-            // --- Admin Login View ---
             <div className="space-y-6 animate-fade-in">
               <div className="flex items-center gap-2 mb-4">
                  <button 
@@ -202,7 +221,7 @@ const App: React.FC = () => {
                  >
                    <ArrowLeft size={20} />
                  </button>
-                 <h3 className="font-bold text-gray-700">管理員登入</h3>
+                 <h3 className="font-bold text-gray-700">後台管理登入</h3>
               </div>
               
               <div>
@@ -216,8 +235,8 @@ const App: React.FC = () => {
                     autoFocus
                     placeholder="預設: 0000"
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 outline-none"
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
+                    value={adminPasswordInput}
+                    onChange={(e) => setAdminPasswordInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
                   />
                 </div>
@@ -233,9 +252,8 @@ const App: React.FC = () => {
           )}
         </div>
         
-        {/* Subtle Admin Toggle Footer */}
         <div className="bg-gray-50 p-3 flex justify-between items-center text-xs text-gray-400 border-t border-gray-100 absolute bottom-0 w-full">
-           <span>© {new Date().getFullYear()} 嘉南療養院</span>
+           <span>© {new Date().getFullYear()} 衛生福利部嘉南療養院</span>
            {!showAdminLogin && (
              <button 
                onClick={() => setShowAdminLogin(true)}
